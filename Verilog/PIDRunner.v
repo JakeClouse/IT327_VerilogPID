@@ -5,17 +5,47 @@ module top_module(
     input [7:0] kp,
     input [7:0] ki,
     input [7:0] kd,
-    output signed [8:0] dutyCycleOut
+    input clk,
+    output reg signed [8:0] dutyCycleOut
     ); 
     wire signed [12:0] error;
+    errorCalc errCalcInst(angleIn, setPoint, error);   
     reg signed [12:0] prevError;
-
     wire signed [20:0] proportional;
-    wire signed [28:0] integral;
-    wire signed [21:0] derivitave;
-    wire signed [29:0] pidOut;
+    reg signed [28:0] integral;
+    wire signed [21:0] derivative;
+    reg signed [29:0] pidOut;
+    initial begin
+        integral = 0;
+        prevError = 0;
+        pidOut = 0;
+    end
+    assign proportional = error * kp;
+
+    
+    assign derivative = ({{9{error[12]}}, error} - {{9{prevError[12]}}, prevError}) * kd;
+
+
+
+    always @(posedge clk) begin
+        integral <= integral + (error * ki);
+        if(integral > 255) integral <= 255;
+        if(integral < -255) integral <= -255;
+
+        prevError <= error;
+
+        pidOut <= {{9{proportional[20]}}, proportional} +integral +{{8{derivative[21]}}, derivative};
+        if(pidOut > 255) dutyCycleOut <= 255;
+        else if(pidOut < -255) dutyCycleOut <= -255;
+        else dutyCycleOut <= pidOut[8:0];
+    end
+
 endmodule
 
+// 12-bit 2's complement subtractor
+// error = setPoint - angleIn
+//Does everything manually bit by bit and returns the whole value at once
+//Avoids using the '-' operator
 module errorCalc(
     input [11:0] angleIn,
     input [11:0] setPoint,
